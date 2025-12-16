@@ -3,7 +3,7 @@ import frappe
 
 def execute(filters=None):
     columns = get_columns()
-    data = get_data(filters)
+    data = get_data()
     return columns, data
 
 
@@ -41,15 +41,21 @@ def get_columns():
             "width": 180,
         },
         {
-            "label": "LCV (Landing Charges)",
-            "fieldname": "lcv_amount",
+            "label": "LCV",
+            "fieldname": "lcv",
             "fieldtype": "Currency",
-            "width": 180,
+            "width": 160,
+        },
+        {
+            "label": "Total Landed Cost (INR)",
+            "fieldname": "total_landed_cost",
+            "fieldtype": "Currency",
+            "width": 200,
         },
     ]
 
 
-def get_data(filters):
+def get_data():
     query = """
         SELECT
             pr.name AS purchase_receipt,
@@ -63,7 +69,12 @@ def get_data(filters):
 
             pr.base_grand_total AS grn_total_inr,
 
-            COALESCE(SUM(lcva.amount), 0) AS lcv_amount
+            -- LCV from applicable_charges
+            COALESCE(SUM(pri.applicable_charges), 0) AS lcv,
+
+            -- Total Landed Cost = GRN Total + LCV
+            pr.base_grand_total + COALESCE(SUM(pri.applicable_charges), 0)
+                AS total_landed_cost
 
         FROM
             `tabPurchase Receipt` pr
@@ -71,14 +82,6 @@ def get_data(filters):
         INNER JOIN
             `tabPurchase Receipt Item` pri
             ON pri.parent = pr.name
-
-        LEFT JOIN
-            `tabLanded Cost Voucher Purchase Receipt` lcvpr
-            ON lcvpr.purchase_receipt = pr.name
-
-        LEFT JOIN
-            `tabLanded Cost Voucher Amount` lcva
-            ON lcva.parent = lcvpr.parent
 
         WHERE
             pr.docstatus = 1

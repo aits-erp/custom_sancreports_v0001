@@ -2,7 +2,7 @@ import frappe
 
 
 def execute(filters=None):
-    return get_columns(), get_data(filters)
+    return get_columns(), get_data(filters or {})
 
 
 def get_columns():
@@ -12,7 +12,7 @@ def get_columns():
             "fieldname": "purchase_receipt",
             "fieldtype": "Link",
             "options": "Purchase Receipt",
-            "width": 170,
+            "width": 160,
         },
         {
             "label": "Posting Date",
@@ -30,19 +30,19 @@ def get_columns():
             "label": "GRN Total (INR)",
             "fieldname": "grn_total",
             "fieldtype": "Currency",
-            "width": 160,
+            "width": 150,
         },
         {
             "label": "LCV",
             "fieldname": "lcv",
             "fieldtype": "Currency",
-            "width": 140,
+            "width": 120,
         },
         {
             "label": "Total Landed Cost",
             "fieldname": "total_landed_cost",
             "fieldtype": "Currency",
-            "width": 180,
+            "width": 170,
         },
     ]
 
@@ -53,15 +53,15 @@ def get_data(filters):
 
     if filters.get("from_date"):
         conditions += " AND pr.posting_date >= %(from_date)s"
-        values["from_date"] = filters.get("from_date")
+        values["from_date"] = filters["from_date"]
 
     if filters.get("to_date"):
         conditions += " AND pr.posting_date <= %(to_date)s"
-        values["to_date"] = filters.get("to_date")
+        values["to_date"] = filters["to_date"]
 
     if filters.get("supplier"):
         conditions += " AND pr.supplier = %(supplier)s"
-        values["supplier"] = filters.get("supplier")
+        values["supplier"] = filters["supplier"]
 
     query = f"""
         SELECT
@@ -71,10 +71,8 @@ def get_data(filters):
 
             pr.base_grand_total AS grn_total,
 
-            -- ✅ LCV from Landed Cost Item (CONFIRMED)
             COALESCE(SUM(lci.applicable_charges), 0) AS lcv,
 
-            -- ✅ Total Landed Cost
             pr.base_grand_total + COALESCE(SUM(lci.applicable_charges), 0)
                 AS total_landed_cost
 
@@ -101,3 +99,42 @@ def get_data(filters):
     """
 
     return frappe.db.sql(query, values, as_dict=True)
+
+
+# 🔹 DRILL-DOWN 1: ITEM-WISE GRN (RATE / AMOUNT)
+@frappe.whitelist()
+def get_item_wise_grn(purchase_receipt):
+    return frappe.db.sql("""
+        SELECT
+            item_code,
+            item_name,
+            qty,
+            rate,
+            amount
+        FROM
+            `tabPurchase Receipt Item`
+        WHERE
+            parent = %s
+            AND docstatus = 1
+        ORDER BY
+            idx
+    """, purchase_receipt, as_dict=True)
+
+
+# 🔹 DRILL-DOWN 2: ITEM-WISE LCV
+@frappe.whitelist()
+def get_item_wise_lcv(purchase_receipt):
+    return frappe.db.sql("""
+        SELECT
+            item_code,
+            item_name,
+            qty,
+            applicable_charges
+        FROM
+            `tabLanded Cost Item`
+        WHERE
+            receipt_document = %s
+            AND docstatus = 1
+        ORDER BY
+            item_code
+    """, purchase_receipt, as_dict=True)

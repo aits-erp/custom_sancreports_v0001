@@ -2,19 +2,17 @@ import frappe
 
 
 def execute(filters=None):
-    columns = get_columns()
-    data = get_data()
-    return columns, data
+    return get_columns(), get_data(filters)
 
 
 def get_columns():
     return [
         {
-            "label": "Purchase Receipt No",
+            "label": "Purchase Receipt",
             "fieldname": "purchase_receipt",
             "fieldtype": "Link",
             "options": "Purchase Receipt",
-            "width": 180,
+            "width": 170,
         },
         {
             "label": "Posting Date",
@@ -23,68 +21,74 @@ def get_columns():
             "width": 120,
         },
         {
-            "label": "Supplier Name",
-            "fieldname": "supplier_name",
+            "label": "Supplier",
+            "fieldname": "supplier",
             "fieldtype": "Data",
             "width": 220,
         },
         {
-            "label": "GRN Rate (USD)",
-            "fieldname": "grn_rate_usd",
-            "fieldtype": "Float",
-            "width": 150,
-        },
-        {
             "label": "GRN Total (INR)",
-            "fieldname": "grn_total_inr",
+            "fieldname": "grn_total",
             "fieldtype": "Currency",
-            "width": 180,
+            "width": 160,
         },
         {
             "label": "LCV",
             "fieldname": "lcv",
             "fieldtype": "Currency",
-            "width": 160,
+            "width": 140,
         },
         {
-            "label": "Total Landed Cost (INR)",
+            "label": "Total Landed Cost",
             "fieldname": "total_landed_cost",
             "fieldtype": "Currency",
-            "width": 200,
+            "width": 180,
         },
     ]
 
 
-def get_data():
-    query = """
+def get_data(filters):
+    conditions = ""
+    values = {}
+
+    if filters.get("from_date"):
+        conditions += " AND pr.posting_date >= %(from_date)s"
+        values["from_date"] = filters.get("from_date")
+
+    if filters.get("to_date"):
+        conditions += " AND pr.posting_date <= %(to_date)s"
+        values["to_date"] = filters.get("to_date")
+
+    if filters.get("supplier"):
+        conditions += " AND pr.supplier = %(supplier)s"
+        values["supplier"] = filters.get("supplier")
+
+    query = f"""
         SELECT
             pr.name AS purchase_receipt,
             pr.posting_date,
-            pr.supplier_name,
+            pr.supplier_name AS supplier,
 
-            ROUND(
-                SUM(pri.rate * pri.qty) / NULLIF(SUM(pri.qty), 0),
-                2
-            ) AS grn_rate_usd,
+            pr.base_grand_total AS grn_total,
 
-            pr.base_grand_total AS grn_total_inr,
+            -- ✅ LCV from Landed Cost Item (CONFIRMED)
+            COALESCE(SUM(lci.applicable_charges), 0) AS lcv,
 
-            -- LCV from applicable_charges
-            COALESCE(SUM(pri.applicable_charges), 0) AS lcv,
-
-            -- Total Landed Cost = GRN Total + LCV
-            pr.base_grand_total + COALESCE(SUM(pri.applicable_charges), 0)
+            -- ✅ Total Landed Cost
+            pr.base_grand_total + COALESCE(SUM(lci.applicable_charges), 0)
                 AS total_landed_cost
 
         FROM
             `tabPurchase Receipt` pr
 
-        INNER JOIN
-            `tabPurchase Receipt Item` pri
-            ON pri.parent = pr.name
+        LEFT JOIN
+            `tabLanded Cost Item` lci
+            ON lci.receipt_document = pr.name
+            AND lci.docstatus = 1
 
         WHERE
             pr.docstatus = 1
+            {conditions}
 
         GROUP BY
             pr.name,
@@ -96,4 +100,4 @@ def get_data():
             pr.posting_date DESC
     """
 
-    return frappe.db.sql(query, as_dict=True)
+    return frappe.db.sql(query, values, as_dict=True)

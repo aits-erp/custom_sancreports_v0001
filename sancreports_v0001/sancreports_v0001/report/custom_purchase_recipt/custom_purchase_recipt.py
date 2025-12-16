@@ -27,8 +27,14 @@ def get_columns():
             "width": 220,
         },
         {
+            "label": "GRN Total (USD)",
+            "fieldname": "grn_total_usd",
+            "fieldtype": "Currency",
+            "width": 150,
+        },
+        {
             "label": "GRN Total (INR)",
-            "fieldname": "grn_total",
+            "fieldname": "grn_total_inr",
             "fieldtype": "Currency",
             "width": 150,
         },
@@ -39,10 +45,10 @@ def get_columns():
             "width": 120,
         },
         {
-            "label": "Total Landed Cost",
+            "label": "Total Landed Cost (INR)",
             "fieldname": "total_landed_cost",
             "fieldtype": "Currency",
-            "width": 170,
+            "width": 180,
         },
     ]
 
@@ -69,11 +75,13 @@ def get_data(filters):
             pr.posting_date,
             pr.supplier_name AS supplier,
 
-            pr.base_grand_total AS grn_total,
+            pr.grand_total AS grn_total_usd,
+            pr.base_grand_total AS grn_total_inr,
 
             COALESCE(SUM(lci.applicable_charges), 0) AS lcv,
 
-            pr.base_grand_total + COALESCE(SUM(lci.applicable_charges), 0)
+            pr.base_grand_total
+            + COALESCE(SUM(lci.applicable_charges), 0)
                 AS total_landed_cost
 
         FROM
@@ -92,6 +100,7 @@ def get_data(filters):
             pr.name,
             pr.posting_date,
             pr.supplier_name,
+            pr.grand_total,
             pr.base_grand_total
 
         ORDER BY
@@ -101,7 +110,7 @@ def get_data(filters):
     return frappe.db.sql(query, values, as_dict=True)
 
 
-# 🔹 DRILL-DOWN 1: ITEM-WISE GRN (RATE / AMOUNT)
+# 🔹 DRILL-DOWN 1: ITEM-WISE GRN (USD)
 @frappe.whitelist()
 def get_item_wise_grn(purchase_receipt):
     return frappe.db.sql("""

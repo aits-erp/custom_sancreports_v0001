@@ -1,7 +1,15 @@
 frappe.query_reports["Custom Purchase recipt"] = {
     filters: [
-        { fieldname: "from_date", label: "From Date", fieldtype: "Date" },
-        { fieldname: "to_date", label: "To Date", fieldtype: "Date" },
+        {
+            fieldname: "from_date",
+            label: "From Date",
+            fieldtype: "Date",
+        },
+        {
+            fieldname: "to_date",
+            label: "To Date",
+            fieldtype: "Date",
+        },
         {
             fieldname: "supplier",
             label: "Supplier",
@@ -10,30 +18,32 @@ frappe.query_reports["Custom Purchase recipt"] = {
         },
     ],
 
-    formatter(value, row, column, data, default_formatter) {
+    formatter: function (value, row, column, data, default_formatter) {
         value = default_formatter(value, row, column, data);
 
-        // 🔹 GRN Drill-down
-        if (column.fieldname === "grn_total" && data) {
+        // 🔹 GRN USD → Item-wise GRN drill-down
+        if (column.fieldname === "grn_total_usd" && data) {
             return `
                 <a href="javascript:void(0)"
-                   class="grn-drill"
+                   class="grn-drilldown"
                    data-pr="${data.purchase_receipt}">
                    ${value}
-                </a>`;
+                </a>
+            `;
         }
 
-        // 🔹 LCV Drill-down
+        // 🔹 LCV → Item-wise LCV drill-down
         if (column.fieldname === "lcv" && data && data.lcv > 0) {
             return `
                 <a href="javascript:void(0)"
-                   class="lcv-drill"
+                   class="lcv-drilldown"
                    data-pr="${data.purchase_receipt}">
                    ${value}
-                </a>`;
+                </a>
+            `;
         }
 
-        // Highlight total
+        // Highlight total landed cost
         if (column.fieldname === "total_landed_cost") {
             return `<b>${value}</b>`;
         }
@@ -41,30 +51,25 @@ frappe.query_reports["Custom Purchase recipt"] = {
         return value;
     },
 
-    onload() {
+    onload: function () {
 
-        // 🔹 GRN click
-        $(document).on("click", ".grn-drill", function () {
+        // 🔹 GRN ITEM POPUP
+        $(document).on("click", ".grn-drilldown", function () {
             let pr = $(this).data("pr");
 
             frappe.call({
-                method:
-                    "sancreports_v0001.sancreports_v0001.report.custom_purchase_recipt.custom_purchase_recipt.get_item_wise_grn",
+                method: "sancreports_v0001.sancreports_v0001.report.custom_purchase_recipt.custom_purchase_recipt.get_item_wise_grn",
                 args: { purchase_receipt: pr },
-                callback(r) {
-                    if (!r.message || !r.message.length) {
-                        frappe.msgprint("No items found.");
-                        return;
-                    }
-
+                callback: function (r) {
                     let rows = r.message.map(d => `
                         <tr>
                             <td>${d.item_code}</td>
                             <td>${d.item_name || ""}</td>
-                            <td style="text-align:right">${d.qty}</td>
-                            <td style="text-align:right">${d.rate}</td>
-                            <td style="text-align:right">${d.amount}</td>
-                        </tr>`).join("");
+                            <td align="right">${d.qty}</td>
+                            <td align="right">${d.rate}</td>
+                            <td align="right">${d.amount}</td>
+                        </tr>
+                    `).join("");
 
                     frappe.msgprint({
                         title: `Item-wise GRN (${pr})`,
@@ -72,43 +77,38 @@ frappe.query_reports["Custom Purchase recipt"] = {
                             <table class="table table-bordered">
                                 <thead>
                                     <tr>
-                                        <th>Item</th>
-                                        <th>Name</th>
+                                        <th>Item Code</th>
+                                        <th>Item Name</th>
                                         <th>Qty</th>
-                                        <th>Rate</th>
-                                        <th>Amount</th>
+                                        <th>Rate (USD)</th>
+                                        <th>Amount (USD)</th>
                                     </tr>
                                 </thead>
                                 <tbody>${rows}</tbody>
                             </table>
                         `,
-                        wide: true,
+                        wide: true
                     });
-                },
+                }
             });
         });
 
-        // 🔹 LCV click
-        $(document).on("click", ".lcv-drill", function () {
+        // 🔹 LCV ITEM POPUP
+        $(document).on("click", ".lcv-drilldown", function () {
             let pr = $(this).data("pr");
 
             frappe.call({
-                method:
-                    "sancreports_v0001.sancreports_v0001.report.custom_purchase_recipt.custom_purchase_recipt.get_item_wise_lcv",
+                method: "sancreports_v0001.sancreports_v0001.report.custom_purchase_recipt.custom_purchase_recipt.get_item_wise_lcv",
                 args: { purchase_receipt: pr },
-                callback(r) {
-                    if (!r.message || !r.message.length) {
-                        frappe.msgprint("No LCV found.");
-                        return;
-                    }
-
+                callback: function (r) {
                     let rows = r.message.map(d => `
                         <tr>
                             <td>${d.item_code}</td>
                             <td>${d.item_name || ""}</td>
-                            <td style="text-align:right">${d.qty}</td>
-                            <td style="text-align:right">${d.applicable_charges}</td>
-                        </tr>`).join("");
+                            <td align="right">${d.qty}</td>
+                            <td align="right">${d.applicable_charges}</td>
+                        </tr>
+                    `).join("");
 
                     frappe.msgprint({
                         title: `Item-wise LCV (${pr})`,
@@ -116,8 +116,8 @@ frappe.query_reports["Custom Purchase recipt"] = {
                             <table class="table table-bordered">
                                 <thead>
                                     <tr>
-                                        <th>Item</th>
-                                        <th>Name</th>
+                                        <th>Item Code</th>
+                                        <th>Item Name</th>
                                         <th>Qty</th>
                                         <th>Applicable Charges</th>
                                     </tr>
@@ -125,10 +125,10 @@ frappe.query_reports["Custom Purchase recipt"] = {
                                 <tbody>${rows}</tbody>
                             </table>
                         `,
-                        wide: true,
+                        wide: true
                     });
-                },
+                }
             });
         });
-    },
+    }
 };
